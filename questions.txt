@@ -1,0 +1,48 @@
+Quelles sont les différences entre les deux types de volumes utilisés dans cette première section ? Dans quel cas utiliser l’un plutôt que l’autre?
+
+Les Bind Mounts utilisent un chemin absolu sur l'hôte et permettent une modification directe des fichiers depuis le système hôte. Les Volumes Docker sont gérés par Docker, identifiés par un nom, et conçus pour le partage entre plusieurs containers.
+
+Dans mon TP, j'ai utilisé un Bind Mount pour modifier en temps réel le fichier HTML depuis Windows, et un Volume Docker pour partager le même contenu entre deux containers Nginx (web-vol1 sur port 8080 et web-vol2 sur port 8081).
+
+On se sert de bind mount pour le dev et les volumes pour la prod
+
+
+Quelles sont les interfaces réseau et adresses IP de chaque container? Vous pouvez trouvez cette information soit depuis l’hôte avec un docker inspect(cfr TP1), soit depuis le container lui-même. Note dans ce dernier cas : Si la commande ip addrn’est pas disponible, installez le package iproute2.
+
+web-vol1 : 172.17.0.2
+web-vol2 : 172.17.0.3
+
+Les containers peuvent-ils se joindre via ping ?
+
+Oui : docker exec web-vol1 ping -c 2 172.17.0.3
+Résultat : 2 packets transmitted, 2 received, 0% packet loss
+Temps : 0.142 ms et 0.214 ms
+
+Les containers ont-ils accès à Internet ?
+
+Oui : docker exec web-vol1 ping -c 2 8.8.8.8
+Résultat : 2 packets transmitted, 2 received, 0% packet loss  
+Temps : 7.57 ms et 8.36 ms
+
+Est-ce une bonne idée d’utiliser ce réseau par défaut? Quels en sont les avantages et les inconvénients ?
+
+Le réseau bridge par défaut est pratique pour des tests simples grâce à sa configuration automatique et à la communication facilitée entre containers. Cependant, il présente des limitations importantes : absence de résolution DNS (nécessité d'utiliser les adresses IP), manque d'isolation entre services, et sécurité réduite puisque tous les containers partagent le même espace réseau. Bien qu'adapté pour des démonstrations, il est déconseillé en production où des réseaux personnalisés offrant segmentation et sécurité sont préférables.
+
+Ce nouveau container peut-il contacter les deux précédents? A-t-il accès à Internet?
+
+Non, le nouveau container web-my-net sur le réseau my-net ne peut pas contacter les containers web-vol1 et web-vol2 qui sont sur le réseau bridge par défaut. Ces containers sont sur des réseaux différents et isolés.
+
+Oui, le nouveau container web-my-net a accès à Internet. Les réseaux personnalisés permettent également la connectivité sortante vers Internet grâce au NAT configuré par Docker.
+
+
+Quels sont les différences entre ce nouveau réseau et le bridge par défaut? Quels en sont les avantages et inconvénients ?
+
+Le réseau personnalisé offre résolution DNS et isolation entre services, idéal pour la production. Le bridge par défaut est simple et automatique mais sans DNS ni isolation, adapté aux tests rapides. Le personnalisé nécessite plus de configuration mais apporte sécurité et organisation.
+
+Qu’avez-vous observé lors de cette manipulation ?
+
+Docker Compose simplifie radicalement la gestion d'infrastructures multi-conteneurs. Avec un seul fichier YAML et la commande docker-compose up, j'ai déployé trois services (deux Nginx, un Alpine) avec réseau et volume partagés. Tous les objets sont automatiquement préfixés, garantissant une organisation claire. La communication entre containers par nom fonctionne immédiatement, et le nettoyage avec docker-compose down est propre et complet. Cette approche "Infrastructure as Code" assure reproductibilité et facilite grandement le déploiement d'applications conteneurisées.
+
+
+
+

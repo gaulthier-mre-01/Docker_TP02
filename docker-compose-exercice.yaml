@@ -1,0 +1,60 @@
+﻿version: "3.8"
+name: tp2-exercice-final
+services:
+  app1:
+    image: custom-nginx
+    container_name: app-frontend
+    ports:
+      - "9000:80"
+    volumes:
+      - app-data:/var/www/html
+      - ./config:/etc/nginx/conf.d
+    networks:
+      - frontend-network
+  
+  app2:
+    image: custom-nginx
+    container_name: app-backend
+    volumes:
+      - app-data:/var/www/html
+      - backend-data:/app
+    networks:
+      - frontend-network
+      - backend-network
+  
+  db:
+    image: mysql:8.0
+    container_name: mysql-db
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpassword
+      MYSQL_DATABASE: appdb
+    volumes:
+      - mysql-data:/var/lib/mysql
+    networks:
+      - backend-network
+  
+  monitor:
+    image: alpine
+    container_name: network-monitor
+    networks:
+      - frontend-network
+      - backend-network
+    command: ["sh", "-c", "apk add iputils && while true; do echo '=== Réseau Frontend ==='; ping -c 1 app-frontend; echo '=== Réseau Backend ==='; ping -c 1 mysql-db; sleep 10; done"]
+
+volumes:
+  app-data:
+  backend-data:
+  mysql-data:
+
+networks:
+  frontend-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 10.10.1.0/24
+  
+  backend-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 10.10.2.0/24

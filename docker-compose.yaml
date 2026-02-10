@@ -1,0 +1,42 @@
+﻿version: "3.8"
+name: tp2-compose
+services:
+  web1:
+    image: custom-nginx
+    container_name: tp2-web1
+    ports:
+      - "8880:80"
+    networks:
+      - tp2-network
+    volumes:
+      - tp2-volume:/usr/share/nginx/html
+    command: ["nginx", "-g", "daemon off;"]
+  
+  web2:
+    image: custom-nginx
+    container_name: tp2-web2
+    ports:
+      - "8881:80"
+    networks:
+      - tp2-network
+    volumes:
+      - tp2-volume:/usr/share/nginx/html
+    command: ["nginx", "-g", "daemon off;"]
+  
+  test:
+    image: alpine
+    container_name: tp2-test
+    networks:
+      - tp2-network
+    command: ["sh", "-c", "while true; do sleep 3600; done"]
+
+volumes:
+  tp2-volume:
+
+networks:
+  tp2-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/24
+          gateway: 172.20.0.1

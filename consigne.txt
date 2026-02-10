@@ -1,0 +1,202 @@
+TP2 : Suite de la découverte de Docker
+Introduction
+Dans ce second labo, nous allons continuer l’exploration des mécanismes des containers Docker. Nous allons d’abord voir comment enrichir les interactions des containers avec l’extérieur via le partage de données et la mise en réseau. Ensuite, nous ferons un pas supplémentaire vers l’Infrastructure as Code en utilisant l’outil “Docker Compose” pour définir une infrastructure composée de plusieurs containers.
+
+A la fin de ce TP, vous devez être capable de :
+
+connaître la différence entre les différents types de volumes pour le partage de données et pouvoir les mettre en oeuvre
+comprendre et réaliser la mise en réseau de containers docker : communication entre containers, avec l’hôte, avec l’extérieur, …
+définir un fichier docker-compose décrivant une infrastructure de containers et ses paramètres.
+Lectures préalables
+Les éléments théoriques liés à ce TP sont présentés dans le chapitre 3 : Docker en pratique du support de cours. Les sections 3.1 et 3.3 présentent les bases explorées la semaine dernière, tandis que les sections 3.4 à 3.6 abordent les sujets travaillés dans labo de cette semaine.
+
+Vous pouvez également, si vous le souhaitez ou si vous avez besoin de plus d’explications, consulter la documentation officielle Docker.
+
+Préparation
+Dans le cadre de ce second TP, nous utiliserons des containers faisant office de serveur web. Pour vous faciliter la vie et éviter de devoir constamment réinstaller les outils nécessaires, il vous est conseillé de créer une image avec tous les outils dont vous aurez besoin. Vous pouvez repartir du Dockerfile créé lors du TP1 au départ de l’image nginx, et y ajouter les packages suivants :
+
+nano
+iproute2
+iputils-ping
+Cette image personnalisée sera référencée par le nom custom-nginxdans le suite de cet énoncé.
+
+1. Les volumes Docker
+Les containers Docker sont par nature “volatiles” : ils sont prévus pour pouvoir être arrêtés, supprimés, redémarrés, … très facilement. Le corollaire de cette volatilité est la non-persistance des données. Si un container plante, ses données ne sont pas récupérables.
+
+Pour éviter cela, on utilise donc des mécanismes spécifiques pour le partage et le stockage des données qui permettront la persistance de ces dernières indépendamment du cycle de vie des containers.
+
+Nous allons explorer deux mécanismes pour la gestion des données :
+
+les Bind Mounts, pour le partage de données avec l’hôte, utilisés notamment pour le développement,
+et les Volumes Docker, qui sont des espaces de stockage gérés par Docker et prévu pour un partage de données entre containers.
+1.1. Bind Mount
+Nous allons repartir du container nginx déjà utilisé lors du TP1. Nous allons faire en sorte de pouvoir éditer dynamiquement le site web servi par le serveur. Pour cela, nous allons monter notre répertoire de travail local sur le répertoire /usr/share/nginx/html du container.
+
+Créez dans votre répertoire de travail un sous-répertoire htmldans lequel se trouve un fichier index.html dans lequel vous ajoutez un contenu html quelconque.
+Depuis votre répertoire de travail, lancez un container web écoutant sur le port 80 avec la commande suivante (remplacez custom-nginx par le nom de votre image personnelle). Notez l’utilisation obligatoire du chemin complet pour le répertoire source.
+docker run  -p 80:80 \
+			--name web \ 
+			--mount type=bind,source="$(pwd)"/html,target=/usr/share/nginx/html/ \ 
+			custom-nginx
+
+Testez que votre container fonctionne via votre navigateur
+Vérifiez ensuite que le Bind Mount fonctionne en modifiant le fichier index.html depuis l’hôte. Vérifiez sur votre navigateur que le changement a bien été pris en compte.
+Stoppez et supprimez ce container.
+Note : si vous utilisez les Bind Mount pour éditer des fichiers de configuration, n’oubliez pas qu’il faut redémarrer le service correspondant pour que la modification de config soit prise en compte.
+
+1.2. Volume Docker
+Un Volume Docker est un répertoire de l’hôte placé sous contrôle de Docker. Il n’est pas destiné à être atteint depuis l’hôte lui-même, mais uniquement depuis un ou plusieurs containers.
+
+Nous allons reproduire les opérations effectuées au point 1.1, mais cette fois en utilisant un volume plutôt qu’un Bind Mount.
+
+Depuis votre répertoire de travail, lancez un container nginx écoutant sur le port 80 avec la commande ci-dessous. Notez cette fois que le paramètre source est le nom du volume et plus un chemin d’accès absolu, et qu’on n’a pas dû indiquer de type pour le mount.
+docker run  -p 80:80 \
+			--name web-volume \
+			--mount source=mon-volume,target=/usr/share/nginx/html/ \
+			custom-nginx
+
+Observez que ce volume a bien été créé soit depuis Docker Desktop, soit depuis la ligne de commande avec docker volume inspect mon-volume. Note : le volume a été automatiquement créé lors du lancement du container, mais il aurait aussi pu être créé à la main avec docker volume create \<nom du container>.
+Ouvrez un shell sur le container, et allez modifier le fichier index.html. Vérifiez que la modification est visible sur votre navigateur.
+Démarrez un second container nginx lié au même volume, en le publiant cette fois sur le port 81 de l’hôte. Vérifiez via votre navigateur que les deux serveurs web affichent effectivement la même page web.
+Quelles sont les différences entre les deux types de volumes utilisés dans cette première section ? Dans quel cas utiliser l’un plutôt que l’autre?
+
+N’arrêtez pas vos deux containers tout de suite, nous allons continuer avec à la section suivante.
+
+2. Les réseaux Docker
+2.1. Réseau par défaut
+Observons tout d’abord les paramètres réseaux de nos deux containers nginx.
+
+Quelles sont les interfaces réseau et adresses IP de chaque container? Vous pouvez trouvez cette information soit depuis l’hôte avec un docker inspect(cfr TP1), soit depuis le container lui-même. Note dans ce dernier cas : Si la commande ip addrn’est pas disponible, installez le package iproute2.
+Les containers peuvent-ils se joindre via ping ?
+Les containers ont-ils accès à Internet ?
+Par défaut, les containers appartiennent tous au réseau par défaut appelé bridge. Ce réseau par défaut est, comme son nom l’indique, de type “bridge”.
+
+Est-ce une bonne idée d’utiliser ce réseau par défaut? Quels en sont les avantages et les inconvénients ?
+2.2. Réseaux définis par l’utilisateur
+Pour éviter les limitations du réseau par défaut, Docker permet la création de réseaux dédiés, configurables, et avec un système de résolution de nom.
+
+Créez un nouveau réseau my-net, avec la commande docker network create my-net.
+Vérifiez qu’il a bien été créé via un docker network ls.
+Trouvez le subnet IP qui lui a été attribué en utilisant la commande docker network inspect my-net
+Démarrez un nouveau container et associez-le à ce réseau : docker run --net=my-net --name=web-my-net custom-nginx
+Ce nouveau container peut-il contacter les deux précédents? A-t-il accès à Internet?
+
+Démarrez un second container sur le réseau my-net. Ouvrez un shell dessus, et effectuez un pingvers l’adresse de l’autre container sur le même subnet.
+Remarquez que, dans les réseaux définis par l’utilisateur (et contrairement au réseau par défaut), une résolution DNS est assurée par Docker. Vous pouvez le constater en faisant un ping sur base du nom du container : ping web-my-net
+Quels sont les différences entre ce nouveau réseau et le bridge par défaut? Quels en sont les avantages et inconvénients ?
+
+Notez que vous pouvez également définir vous-même les adressages IP des réseaux Docker, lors de leur création : docker network create --subnet=10.10.10.0/24 custom-network. De même, il est possible d’assigner une adresse IP spécifique à un container lors de sa création, avec l’option “ip” : docker run --net my-net --name web-my-net --ip "10.10.10.10" custom-nginx
+
+3. Docker-compose
+Un fichier docker-compose permet de réunir dans un fichier unique tous les paramètres d’une infrastructure Docker comportant plusieurs objets : containers, volumes, réseaux, …
+
+Voici un exemple de fichier docker-compose.yaml qui regroupe l’ensemble des opérations effectuées dans le début de ce TP : deux containers web sont connectés à un subnet dédiés, et partagent un même volume. Chacun d’eux a un port publié sur l’hôte.
+
+Le format de ce fichier est le format YAML. Attention, ce format utilise des indentations pour définir les blocs, et ces indentations doivent être des espaces. Evitez donc les tabulations!
+
+Attention, n’utilisez pas le bouton pour copier le fichier yaml, vous risquez d’avoir des problèmes de syntaxe. Un “ctrl-c/ctrl-v” fonctionnera normalement mieux.
+
+version: "3"
+name: tp2
+services:
+  web1:
+    image: custom-nginx  
+    ports:
+      - 80:80    
+    networks:
+      - my-net  
+    volumes: 
+      - web-volume:/usr/share/nginx/html/
+  web2: 
+    image: custom-nginx
+    ports:
+      - 81:80
+    volumes:
+      - web-volume:/usr/share/nginx/html/
+    networks:
+      - my-net
+volumes:
+  web-volume:
+
+networks:
+  my-net: 
+    driver: bridge 
+    ipam: 
+      config: 
+        - subnet: 10.0.1.0/24
+
+
+Copiez la configuration ci-dessus dans un fichier docker-compose.yaml.
+Lancez l’infrastructure définie dans ce fichier via la commande docker-compose up.
+Observez tous les objets créés : containers, réseaux, volumes. Notez comme ils ont tous été préfixés par le nom de l’infrastructure créée.
+Vérifiez le bon fonctionnement des deux serveurs web, et essayez de personnaliser leur page html partagée.
+Trouvez quelles sont les adresses IP respectives des containers, et effectuez un ping entre eux sur base de leur nom de container (ex : ping tp2-web1-1)
+Pour éteindre les containers de cette infra, vous pouvez utiliser docker-compose down.
+Qu’avez-vous observé lors de cette manipulation ? Faites un court bilan sur base de screenshots.
+
+4. Exercices récapitulatifs
+4.1. Mise en application simple
+Créez un docker-compose pour l’infrastructure suivante :
+
+Deux volumes sont créés : Volume1 et Volume2
+Deux réseaux sont utilisés : Réseau1 et Réseau2
+Trois containers sont définis :
+ContainerA :
+accède à Volume1 sur le chemin /app
+a besoin d’accéder à un répertoire partagé sur l’hôte, sur le chemin /src
+appartient au Réseau1
+ContainerB :
+Accède à Volume1 sur /app1 et Volume2 sur /app2
+Appartient à Réseau1 et Réseau2
+ContainerC :
+Accède à Volume2 sur /app
+Appartient à Réseau2
+Votre infrastructure est-elle conforme à ce qui était attendu? Comment avez-vous pu la valider? Donnez les commandes utilisées et illustrez le résultat par des screenshots.
+
+4.2. Exemple du cours théorique
+Dans le cours théorique, l’exemple ci-dessous vous a été présenté.
+
+Illustation de l'utilisation des volumes et des bind mounts<figcaption>
+
+Exemple illustratif.
+</figcaption>
+Prenez connaissance de cette infrastructure et analysez les objets définis dans ce Docker-compose :
+
+Comment les données sont-elles partagées? Via des Bind Mounts ou des Volumes? Pourquoi ?
+Quels sont les spécificités de chaque container?
+Attention, n’utilisez pas le bouton pour copier le fichier yaml, vous risquez d’avoir des problèmes de syntaxe. Un “ctrl-c/ctrl-v” fonctionnera normalement mieux.
+
+Essayez de lancer l’infrastructure avec docker-compose up, observez ce qui se passe puis utilisez vos outils d’analyse habituels pour vous assurez que tout fonctionne comme attendu.
+
+version: "3" 
+name: app-web-exemple 
+services:
+  web: 
+    image: nginx 
+    ports: 
+      - 3000:80
+    networks: 
+      - net
+    volumes: 
+      - ./src:/app
+  db:
+    image: mysql
+    volumes:
+      - db-data:/var/lib/mysql
+    networks:
+      - net
+    environment: 
+      - MYSQL_ROOT_PASSWORD=my-secure-pwd
+volumes: 
+  db-data:
+networks:
+  net:
+
+Votre infrastructure est-elle conforme à ce qui était attendu? Comment avez-vous pu la valider? Donnez les commandes utilisées et illustrez le résultat par des screenshots.
+
+Notez qu’ici, le lien entre le serveur web et sa DB est possible via le subnet IP, mais rien n’a été mis en place pour l’exploiter concrètement : création des tables en DB, création d’une application exploitant les données, …
+
+4.3. Exemple du tutoriel Docker
+Docker propose un tutoriel pour Docker Compose qui permet de construire pas à pas une infrastructure applicative comportant deux containers : une application Python, et un container Redis servant de cache pour les données. Vous êtes invités à réaliser ce tutoriel.
+
+Quelles sont vos observations suite à la réalisation de ce tutoriel ? Sur quelle base les containers sont-ils lancés ? Qu’avez-vous appris de nouveau ?
